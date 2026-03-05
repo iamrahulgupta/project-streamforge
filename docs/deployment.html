@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deployment - StreamForge Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 Deployment Guide</h1>
+      <p>Deploy StreamForge to production environments</p>
+    </header>
+
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="architecture.html">Architecture</a></li>
+        <li><a href="deployment.html" class="active">Deployment</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="protocol.html">Protocol</a></li>
+        <li><a href="configuration.html">Configuration</a></li>
+        <li><a href="performance.html">Performance</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <h2>Production Deployment</h2>
+
+      <h3>Deployment Options</h3>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>🐳 Docker Compose</h4>
+          <p>Quick local deployment with integrated monitoring</p>
+        </div>
+        <div class="feature-card">
+          <h4>☸️ Kubernetes</h4>
+          <p>Scalable cloud-native deployment with orchestration</p>
+        </div>
+        <div class="feature-card">
+          <h4>🖥️ Bare Metal</h4>
+          <p>Direct deployment on servers for maximum control</p>
+        </div>
+        <div class="feature-card">
+          <h4>☁️ Cloud Platforms</h4>
+          <p>AWS, GCP, Azure with managed services</p>
+        </div>
+      </div>
+
+      <h3>Docker Compose Deployment</h3>
+
+      <h4>Quick Start</h4>
+      <pre><code>cd docker
+docker-compose up -d</code></pre>
+
+      <h4>Verify Deployment</h4>
+      <pre><code># Check running containers
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Test broker health
+curl http://localhost:8080/health</code></pre>
+
+      <h4>Scaling Brokers</h4>
+      <p>To add more brokers, extend docker-compose.yml:</p>
+      <pre><code>broker-4:
+  build:
+    context: ..
+    dockerfile: docker/broker.Dockerfile
+  container_name: streamforge-broker-4
+  environment:
+    BROKER_ID: 4
+    PORT: 9092
+    METRICS_PORT: 9101
+  ports:
+    - "9095:9092"
+    - "9104:9101"
+  volumes:
+    - broker4_data:/data/streamforge
+  networks:
+    - streamforge-net</code></pre>
+
+      <h4>Storage Management</h4>
+      <pre><code># View volumes
+docker volume ls | grep streamforge
+
+# Remove all volumes (WARNING: data loss)
+docker-compose down -v
+
+# Backup broker data
+docker run -v broker1_data:/data -v $(pwd)/backup:/backup \
+  alpine tar czf /backup/broker1.tar.gz -C /data .</code></pre>
+
+      <h3>Kubernetes Deployment</h3>
+
+      <h4>StatefulSet Configuration</h4>
+      <pre><code>apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: streamforge-broker
+spec:
+  serviceName: streamforge
+  replicas: 3
+  selector:
+    matchLabels:
+      app: streamforge
+  template:
+    metadata:
+      labels:
+        app: streamforge
+    spec:
+      containers:
+      - name: broker
+        image: streamforge:latest
+        ports:
+        - containerPort: 9092
+          name: broker
+        - containerPort: 9101
+          name: metrics
+        env:
+        - name: BROKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: LISTEN_ADDR
+          value: "0.0.0.0"
+        - name: PORT
+          value: "9092"
+        - name: DATA_DIR
+          value: "/data/streamforge"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 30
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 100Gi</code></pre>
+
+      <h4>Service Configuration</h4>
+      <pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: streamforge
+spec:
+  clusterIP: None
+  selector:
+    app: streamforge
+  ports:
+  - port: 9092
+    targetPort: 9092
+    name: broker</code></pre>
+
+      <h4>Helm Chart</h4>
+      <p>Create a Helm chart for easy deployment:</p>
+      <pre><code>helm repo add streamforge https://charts.streamforge.io
+helm install streamforge streamforge/broker \
+  --set replicas=3 \
+  --set storage.size=100Gi \
+  --set broker.config.replication_factor=2</code></pre>
+
+      <h3>Bare Metal Deployment</h3>
+
+      <h4>System Requirements</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Requirement</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CPU</td>
+            <td>2+ cores</td>
+            <td>8+ cores for production</td>
+          </tr>
+          <tr>
+            <td>Memory</td>
+            <td>2GB RAM</td>
+            <td>16GB+ for production</td>
+          </tr>
+          <tr>
+            <td>Disk</td>
+            <td>100GB SSD</td>
+            <td>Fast SSD (NVMe) recommended</td>
+          </tr>
+          <tr>
+            <td>Network</td>
+            <td>1 Gbps</td>
+            <td>10 Gbps for high throughput</td>
+          </tr>
+          <tr>
+            <td>OS</td>
+            <td>Linux (Ubuntu 20.04+, Debian 11+, CentOS 8+)</td>
+            <td>Ubuntu 22.04 LTS recommended</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>Installation Steps</h4>
+      <pre><code># 1. Install dependencies
+sudo apt-get update
+sudo apt-get install -y build-essential cmake git curl
+
+# 2. Clone repository
+git clone https://github.com/iamrahulgupta/project-streamforge.git
+cd project-streamforge
+
+# 3. Build broker
+cd storage && mkdir build && cd build && cmake .. && cmake --build . && cd ../..
+cd broker && cargo build --release && cd ..
+
+# 4. Create system user
+sudo useradd -r -s /bin/false streamforge
+
+# 5. Create directories
+sudo mkdir -p /opt/streamforge/{bin,config,data}
+sudo chown -R streamforge:streamforge /opt/streamforge
+
+# 6. Copy binary
+sudo cp broker/target/release/broker /opt/streamforge/bin/
+
+# 7. Create systemd service
+sudo tee /etc/systemd/system/streamforge.service > /dev/null <<EOF
+[Unit]
+Description=StreamForge Broker
+After=network.target
+
+[Service]
+Type=simple
+User=streamforge
+WorkingDirectory=/opt/streamforge
+ExecStart=/opt/streamforge/bin/broker
+Restart=always
+RestartSec=10
+Environment="BROKER_ID=1"
+Environment="LISTEN_ADDR=0.0.0.0"
+Environment="PORT=9092"
+Environment="DATA_DIR=/opt/streamforge/data"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 8. Enable and start service
+sudo systemctl daemon-reload
+sudo systemctl enable streamforge
+sudo systemctl start streamforge
+
+# 9. Verify
+sudo systemctl status streamforge</code></pre>
+
+      <h4>Log Management</h4>
+      <pre><code># View logs
+sudo journalctl -u streamforge -f
+
+# Archive logs
+sudo journalctl -u streamforge --since "2 days ago" > broker.log
+
+# Configure log rotation
+sudo tee /etc/logrotate.d/streamforge > /dev/null <<EOF
+/var/log/streamforge/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0640 streamforge streamforge
+    sharedscripts
+}
+EOF</code></pre>
+
+      <h3>Cloud Platform Deployment</h3>
+
+      <h4>AWS</h4>
+
+      <p><strong>Using EC2 + EBS:</strong></p>
+      <ul>
+        <li>Launch m5.2xlarge instances (8 vCPU, 32 GB RAM)</li>
+        <li>Attach gp3 EBS volumes (500 GB, 16000 IOPS)</li>
+        <li>Use placement groups for low latency</li>
+        <li>Place behind NLB (Network Load Balancer) for high performance</li>
+      </ul>
+
+      <p><strong>Using ECS (Elastic Container Service):</strong></p>
+      <pre><code>aws ecs create-cluster --cluster-name streamforge
+
+aws ecs register-task-definition \
+  --cli-input-json file://task-definition.json
+
+aws ecs create-service \
+  --cluster streamforge \
+  --service-name broker-service \
+  --task-definition streamforge:1 \
+  --desired-count 3</code></pre>
+
+      <h4>GCP</h4>
+
+      <p><strong>Using GCE (Google Compute Engine):</strong></p>
+      <ul>
+        <li>Create n2-standard-8 instances</li>
+        <li>Use pd-ssd persistent disks (500 GB)</li>
+        <li>Create instance group for auto-scaling</li>
+        <li>Use Cloud Load Balancing for traffic distribution</li>
+      </ul>
+
+      <p><strong>Using GKE (Google Kubernetes Engine):</strong></p>
+      <pre><code>gcloud container clusters create streamforge \
+  --num-nodes 3 \
+  --machine-type n2-standard-8 \
+  --disk-type pd-ssd \
+  --disk-size 500
+
+kubectl apply -f k8s/statefulset.yaml
+kubectl apply -f k8s/service.yaml</code></pre>
+
+      <h4>Azure</h4>
+
+      <p><strong>Using Azure VMs:</strong></p>
+      <ul>
+        <li>Create Standard_D8s_v5 VMs</li>
+        <li>Use Premium SSD (P30, 1TB)</li>
+        <li>Place behind Azure Load Balancer</li>
+        <li>Enable accelerated networking for lower latency</li>
+      </ul>
+
+      <h3>Monitoring & Observability</h3>
+
+      <h4>Prometheus Setup</h4>
+      <pre><code>global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'streamforge'
+    static_configs:
+      - targets: ['broker-1:9101', 'broker-2:9101', 'broker-3:9101']</code></pre>
+
+      <h4>Grafana Dashboards</h4>
+      <ul>
+        <li>Broker Health Dashboard</li>
+        <li>Throughput and Latency Dashboard</li>
+        <li>Storage Utilization Dashboard</li>
+        <li>Replication Status Dashboard</li>
+        <li>Consumer Group Progress Dashboard</li>
+      </ul>
+
+      <h4>Alerting Rules</h4>
+      <pre><code>groups:
+- name: streamforge
+  rules:
+  - alert: BrokerDown
+    expr: up{job="streamforge"} == 0
+    for: 2m
+
+  - alert: HighLatency
+    expr: broker_operation_latency_ms > 100
+    for: 5m
+
+  - alert: LowThroughput
+    expr: rate(broker_messages_produced[5m]) < 1000
+    for: 10m
+
+  - alert: StorageFull
+    expr: node_filesystem_avail_bytes{mountpoint="/data"} < 10737418240
+    for: 5m</code></pre>
+
+      <h3>Backup & Disaster Recovery</h3>
+
+      <h4>Backup Strategy</h4>
+      <pre><code>#!/bin/bash
+# Daily backup script
+
+BACKUP_DIR="/backups/streamforge"
+mkdir -p $BACKUP_DIR
+
+# Backup each broker
+for BROKER_ID in 1 2 3; do
+  BROKER_DATA="/data/streamforge-broker-$BROKER_ID"
+  BACKUP_FILE="$BACKUP_DIR/broker-$BROKER_ID-$(date +%Y%m%d).tar.gz"
+  tar czf $BACKUP_FILE $BROKER_DATA
+done
+
+# Upload to cloud storage
+aws s3 sync $BACKUP_DIR s3://streamforge-backups/</code></pre>
+
+      <h4>Recovery Procedure</h4>
+      <ol>
+        <li>Stop affected broker: <code>systemctl stop streamforge</code></li>
+        <li>Clear data directory: <code>rm -rf /data/streamforge/*</code></li>
+        <li>Restore from backup: <code>tar xzf backup-file.tar.gz -C /data</code></li>
+        <li>Start broker: <code>systemctl start streamforge</code></li>
+        <li>Verify: <code>curl http://localhost:8080/health</code></li>
+      </ol>
+
+      <h3>Security Considerations</h3>
+
+      <h4>Network Security</h4>
+      <ul>
+        <li>Use VPN or private networks for inter-broker communication</li>
+        <li>Enable TLS/SSL for all communications</li>
+        <li>Use firewall rules to restrict access</li>
+        <li>Implement network segmentation</li>
+      </ul>
+
+      <h4>Access Control</h4>
+      <ul>
+        <li>Enable SASL authentication for clients</li>
+        <li>Implement ACLs for topic access</li>
+        <li>Use certificate-based authentication for brokers</li>
+        <li>Rotate credentials regularly</li>
+      </ul>
+
+      <h4>Data Security</h4>
+      <ul>
+        <li>Encrypt data at rest using dm-crypt or similar</li>
+        <li>Enable TLS for in-transit data</li>
+        <li>Use secure backup storage</li>
+        <li>Implement audit logging</li>
+      </ul>
+
+      <h3>Performance Tuning</h3>
+
+      <h4>Linux Kernel Parameters</h4>
+      <pre><code># Increase file descriptors
+ulimit -n 1000000
+
+# TCP tuning
+sysctl -w net.core.rmem_default=134217728
+sysctl -w net.core.wmem_default=134217728
+sysctl -w net.ipv4.tcp_rmem="4096 87380 67108864"
+sysctl -w net.ipv4.tcp_wmem="4096 65536 67108864"</code></pre>
+
+      <h4>Broker Configuration</h4>
+      <pre><code>export LOG_LEVEL=info
+export BATCH_SIZE=100000
+export BATCH_TIMEOUT_MS=100
+export COMPRESSION_TYPE=snappy
+export REPLICATION_FACTOR=3
+export MIN_INSYNC_REPLICAS=2
+export RETENTION_MS=604800000  # 7 days</code></pre>
+
+      <h3>Next Steps</h3>
+      <ul>
+        <li><a href="configuration.html">Configure Settings</a> - Tune for your workload</li>
+        <li><a href="performance.html">Performance Guide</a> - Optimize throughput and latency</li>
+        <li><a href="api.html">API Reference</a> - Integrate with applications</li>
+      </ul>
+    </main>
+
+    <footer>
+      <p><strong>StreamForge Documentation</strong></p>
+      <p>A modern event streaming platform built with Rust, Go, and C++</p>
+      <p><a href="https://github.com/iamrahulgupta/project-streamforge">GitHub Repository</a> • 
+         <a href="https://github.com/iamrahulgupta/project-streamforge/issues">Report Issues</a></p>
+      <p><small>© 2026 StreamForge Project. MIT License.</small></p>
+    </footer>
+  </div>
+</body>
+</html>

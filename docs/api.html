@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Reference - StreamForge Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📚 API Reference</h1>
+      <p>Complete API documentation for StreamForge clients and brokers</p>
+    </header>
+
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="architecture.html">Architecture</a></li>
+        <li><a href="deployment.html">Deployment</a></li>
+        <li><a href="api.html" class="active">API Reference</a></li>
+        <li><a href="protocol.html">Protocol</a></li>
+        <li><a href="configuration.html">Configuration</a></li>
+        <li><a href="performance.html">Performance</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <h2>API Reference</h2>
+
+      <h3>REST API (Admin)</h3>
+
+      <h4>Health Check</h4>
+      <pre><code>GET /health
+Response: 200 OK
+{
+  "status": "healthy"
+}</code></pre>
+
+      <h4>Topic Management</h4>
+
+      <p><strong>Create Topic</strong></p>
+      <pre><code>POST /api/v1/topics
+Content-Type: application/json
+
+{
+  "name": "my-topic",
+  "partitions": 3,
+  "replication_factor": 2,
+  "config": {}
+}
+
+Response: 201 Created
+{
+  "topic": {
+    "name": "my-topic",
+    "partitions": 3,
+    "replication_factor": 2,
+    "created_at": 1646000000
+  }
+}</code></pre>
+
+      <p><strong>List Topics</strong></p>
+      <pre><code>GET /api/v1/topics
+Response: 200 OK
+{
+  "topics": [
+    {
+      "name": "my-topic",
+      "partitions": 3,
+      "replication_factor": 2
+    },
+    {
+      "name": "events",
+      "partitions": 5,
+      "replication_factor": 3
+    }
+  ]
+}</code></pre>
+
+      <p><strong>Describe Topic</strong></p>
+      <pre><code>GET /api/v1/topics/{topic_name}
+Response: 200 OK
+{
+  "topic": {
+    "name": "my-topic",
+    "partitions": 3,
+    "replication_factor": 2
+  },
+  "partitions": [
+    {
+      "id": 0,
+      "leader": 1,
+      "replicas": [1, 2, 3],
+      "isr": [1, 2],
+      "high_water_mark": 1000000
+    }
+  ]
+}</code></pre>
+
+      <p><strong>Delete Topic</strong></p>
+      <pre><code>DELETE /api/v1/topics/{topic_name}
+Response: 204 No Content</code></pre>
+
+      <h4>Message Operations</h4>
+
+      <p><strong>Produce Message</strong></p>
+      <pre><code>POST /api/v1/produce
+Content-Type: application/json
+
+{
+  "topic": "my-topic",
+  "key": "user-123",
+  "value": "event data",
+  "partition": 0
+}
+
+Response: 200 OK
+{
+  "offset": 1000000,
+  "partition": 0,
+  "timestamp": 1646000000000
+}</code></pre>
+
+      <p><strong>Consume Messages</strong></p>
+      <pre><code>GET /api/v1/consume?topic=my-topic&group=my-group&max_messages=10
+Response: 200 OK
+{
+  "messages": [
+    {
+      "key": "user-123",
+      "value": "event data",
+      "offset": 1000000,
+      "timestamp": 1646000000000,
+      "partition": 0
+    }
+  ]
+}</code></pre>
+
+      <h4>Cluster Management</h4>
+
+      <p><strong>Describe Cluster</strong></p>
+      <pre><code>GET /api/v1/cluster
+Response: 200 OK
+{
+  "cluster_id": "streamforge-prod",
+  "controller": 1,
+  "brokers": [
+    {
+      "id": 1,
+      "host": "broker-1.example.com",
+      "port": 9092,
+      "rack": "us-east-1a"
+    },
+    {
+      "id": 2,
+      "host": "broker-2.example.com",
+      "port": 9092,
+      "rack": "us-east-1b"
+    }
+  ]
+}</code></pre>
+
+      <p><strong>List Brokers</strong></p>
+      <pre><code>GET /api/v1/brokers
+Response: 200 OK
+{
+  "brokers": [
+    {
+      "id": 1,
+      "host": "broker-1",
+      "port": 9092,
+      "leader": true,
+      "partitions_count": 150
+    }
+  ]
+}</code></pre>
+
+      <h4>Consumer Groups</h4>
+
+      <p><strong>Describe Consumer Group</strong></p>
+      <pre><code>GET /api/v1/groups/{group_id}
+Response: 200 OK
+{
+  "group": {
+    "id": "my-group",
+    "topics": ["my-topic"],
+    "state": "stable",
+    "member_count": 2
+  },
+  "members": [
+    {
+      "member_id": "consumer-1",
+      "client_id": "app-1",
+      "assigned_partitions": ["my-topic-0", "my-topic-1"]
+    }
+  ]
+}</code></pre>
+
+      <p><strong>List Consumer Groups</strong></p>
+      <pre><code>GET /api/v1/groups
+Response: 200 OK
+{
+  "groups": [
+    {
+      "id": "my-group",
+      "topics": ["my-topic"],
+      "state": "stable"
+    }
+  ]
+}</code></pre>
+
+      <p><strong>Reset Group Offset</strong></p>
+      <pre><code>POST /api/v1/groups/{group_id}/reset-offset
+{
+  "topic": "my-topic",
+  "offset": 500000
+}
+Response: 200 OK</code></pre>
+
+      <h4>Metrics</h4>
+
+      <p><strong>Get Metrics</strong></p>
+      <pre><code>GET /api/v1/metrics?broker_id=1
+Response: 200 OK
+{
+  "broker_metrics": [
+    {
+      "broker_id": 1,
+      "messages_produced": 1000000,
+      "messages_consumed": 980000,
+      "bytes_written": 1073741824,
+      "bytes_read": 1052266419,
+      "active_connections": 15,
+      "avg_latency_ms": 2.5,
+      "timestamp": 1646000000000
+    }
+  ]
+}</code></pre>
+
+      <h3>Go SDK API</h3>
+
+      <h4>Producer API</h4>
+
+      <p><strong>Create Producer</strong></p>
+      <pre><code>package main
+
+import "github.com/iamrahulgupta/streamforge/sdk-go/producer"
+
+config := producer.DefaultProducerConfig(
+  []string{"localhost:9092"},
+  "my-topic",
+)
+config.BatchSize = 100
+config.BatchTimeoutMs = 100
+
+p, err := producer.NewProducer(config)</code></pre>
+
+      <p><strong>Synchronous Produce</strong></p>
+      <pre><code>msg := &producer.Message{
+  Key:   []byte("user-123"),
+  Value: []byte("event data"),
+}
+
+result, err := p.ProduceSync(ctx, msg)
+if err != nil {
+  log.Fatal(err)
+}
+
+fmt.Printf("Offset: %d, Partition: %d\n", result.Offset, result.Partition)</code></pre>
+
+      <p><strong>Asynchronous Produce</strong></p>
+      <pre><code>resultChan, err := p.Produce(ctx, msg)
+
+go func() {
+  result := <-resultChan
+  fmt.Printf("Message sent to offset %d\n", result.Offset)
+}()</code></pre>
+
+      <h4>Consumer API</h4>
+
+      <p><strong>Create Consumer</strong></p>
+      <pre><code>config := consumer.DefaultConsumerConfig(
+  []string{"localhost:9092"},
+  "my-group",
+  []string{"my-topic"},
+)
+config.AutoCommit = true
+config.AutoCommitIntervalMs = 1000
+
+c, err := consumer.NewConsumer(config)</code></pre>
+
+      <p><strong>Poll Messages</strong></p>
+      <pre><code>msg, err := c.Poll(ctx)
+if err != nil {
+  log.Fatal(err)
+}
+
+fmt.Printf("Key: %s, Value: %s\n", msg.Key, msg.Value)
+c.CommitMessage(msg)</code></pre>
+
+      <p><strong>Poll Multiple Messages</strong></p>
+      <pre><code>messages, err := c.PollMessages(ctx, 100)
+if err != nil {
+  log.Fatal(err)
+}
+
+for _, msg := range messages {
+  fmt.Printf("Received: %s\n", msg.Value)
+}
+
+// Commit all messages
+for _, msg := range messages {
+  c.CommitMessage(msg)
+}</code></pre>
+
+      <h4>Batch Operations</h4>
+
+      <p><strong>Producer Batching</strong></p>
+      <pre><code>// Configure batching
+config.BatchSize = 1000
+config.BatchTimeoutMs = 100
+
+// Messages are automatically batched
+for i := 0; i < 5000; i++ {
+  msg := &producer.Message{
+    Key:   []byte(fmt.Sprintf("msg-%d", i)),
+    Value: []byte("data"),
+  }
+  p.Produce(ctx, msg)
+  
+  // Every 1000 messages or 100ms, batch is sent
+}</code></pre>
+
+      <h4>Error Handling</h4>
+
+      <pre><code>// Producer error handling
+msg := &producer.Message{
+  Key:   []byte("key"),
+  Value: []byte("value"),
+}
+
+result, err := p.ProduceSync(ctx, msg)
+if err != nil {
+  switch err {
+  case context.DeadlineExceeded:
+    log.Println("Request timeout")
+  case producer.ErrQueueFull:
+    log.Println("Queue full, retry later")
+  default:
+    log.Printf("Error: %v", err)
+  }
+}
+
+// Consumer error handling
+msg, err := c.Poll(ctx)
+if err != nil {
+  switch err {
+  case consumer.ErrNoMessages:
+    log.Println("No messages available")
+  case consumer.ErrConsumerClosed:
+    log.Println("Consumer closed")
+  default:
+    log.Printf("Error: %v", err)
+  }
+}</code></pre>
+
+      <h3>Admin CLI API</h3>
+
+      <h4>Topic Commands</h4>
+      <pre><code># List topics
+streamforge topic list
+
+# Create topic
+streamforge topic create events \
+  --partitions 3 \
+  --replication-factor 2
+
+# Describe topic
+streamforge topic describe events
+
+# Delete topic
+streamforge topic delete events
+
+# Alter topic config
+streamforge topic alter events \
+  --config "retention.ms=604800000"</code></pre>
+
+      <h4>Message Commands</h4>
+      <pre><code># Produce message
+streamforge produce \
+  --topic events \
+  --key "user-123" \
+  --value "event data"
+
+# Consume messages
+streamforge consume \
+  --topic events \
+  --group my-group \
+  --max-messages 10 \
+  --format json</code></pre>
+
+      <h4>Server Command</h4>
+      <pre><code># Start REST API server
+streamforge server --port 8080 \
+  --brokers broker-1:9092,broker-2:9092,broker-3:9092</code></pre>
+
+      <h3>Error Codes</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Message</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0</td>
+            <td>Success</td>
+            <td>Operation completed successfully</td>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>UnknownError</td>
+            <td>Unexpected error</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>TopicNotFound</td>
+            <td>Topic does not exist</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>BrokerNotAvailable</td>
+            <td>Broker is not available</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>MessageTooLarge</td>
+            <td>Message size exceeds limit</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>OffsetOutOfRange</td>
+            <td>Requested offset is invalid</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>NotLeaderForPartition</td>
+            <td>Broker is not partition leader</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>RequestTimedOut</td>
+            <td>Request timed out</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Rate Limits</h3>
+
+      <ul>
+        <li><strong>Producer:</strong> No hard limit, depends on broker capacity</li>
+        <li><strong>Consumer:</strong> No hard limit, depends on broker capacity</li>
+        <li><strong>Admin API:</strong> 1000 requests/second per client</li>
+        <li><strong>Message Size:</strong> Default 1MB, configurable up to 10MB</li>
+      </ul>
+
+      <h3>Timeout Configuration</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>request.timeout.ms</td>
+            <td>30000 (30s)</td>
+            <td>Broker request timeout</td>
+          </tr>
+          <tr>
+            <td>session.timeout.ms</td>
+            <td>10000 (10s)</td>
+            <td>Consumer session timeout</td>
+          </tr>
+          <tr>
+            <td>heartbeat.interval.ms</td>
+            <td>3000 (3s)</td>
+            <td>Consumer heartbeat interval</td>
+          </tr>
+          <tr>
+            <td>metadata.max.age.ms</td>
+            <td>300000 (5min)</td>
+            <td>Metadata refresh interval</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Next Steps</h3>
+      <ul>
+        <li><a href="protocol.html">Protocol Specification</a> - Wire protocol details</li>
+        <li><a href="configuration.html">Configuration Guide</a> - Tune settings</li>
+        <li><a href="performance.html">Performance Guide</a> - Optimize usage</li>
+      </ul>
+    </main>
+
+    <footer>
+      <p><strong>StreamForge Documentation</strong></p>
+      <p>A modern event streaming platform built with Rust, Go, and C++</p>
+      <p><a href="https://github.com/iamrahulgupta/project-streamforge">GitHub Repository</a> • 
+         <a href="https://github.com/iamrahulgupta/project-streamforge/issues">Report Issues</a></p>
+      <p><small>© 2026 StreamForge Project. MIT License.</small></p>
+    </footer>
+  </div>
+</body>
+</html>

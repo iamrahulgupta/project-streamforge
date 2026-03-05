@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started - StreamForge Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 Getting Started with StreamForge</h1>
+      <p>Install and run your first StreamForge example</p>
+    </header>
+
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="getting-started.html" class="active">Getting Started</a></li>
+        <li><a href="architecture.html">Architecture</a></li>
+        <li><a href="deployment.html">Deployment</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="protocol.html">Protocol</a></li>
+        <li><a href="configuration.html">Configuration</a></li>
+        <li><a href="performance.html">Performance</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <h2>Getting Started</h2>
+
+      <h3>Prerequisites</h3>
+      <p>Before you begin, ensure you have the following installed:</p>
+      <ul>
+        <li><strong>Rust 1.70+</strong> - Download from <a href="https://rustup.rs/">rustup.rs</a></li>
+        <li><strong>Go 1.21+</strong> - Download from <a href="https://golang.org/dl/">golang.org</a></li>
+        <li><strong>Docker & Docker Compose</strong> (optional) - For containerized deployment</li>
+        <li><strong>C++17 compiler</strong> - For building storage backend</li>
+        <li><strong>CMake 3.15+</strong> - For building C++ components</li>
+      </ul>
+
+      <h3>Installation</h3>
+
+      <h4>1. Clone the Repository</h4>
+      <pre><code>git clone https://github.com/iamrahulgupta/project-streamforge.git
+cd project-streamforge</code></pre>
+
+      <h4>2. Build the Broker</h4>
+      <pre><code># Build storage backend (C++)
+cd storage
+mkdir build && cd build
+cmake ..
+cmake --build . --config Release
+cd ../..
+
+# Build broker (Rust)
+cd broker
+cargo build --release
+cd ..</code></pre>
+
+      <h4>3. Build the SDK and Admin Tools (Go)</h4>
+      <pre><code>cd sdk-go
+go mod download
+cd ..
+
+cd admin
+go mod download
+cd ..</code></pre>
+
+      <div class="alert alert-success">
+        <strong>Tip:</strong> All builds can also use Docker Compose for a containerized setup without local dependencies.
+      </div>
+
+      <h3>Quick Start with Docker</h3>
+
+      <p>The easiest way to get started is using Docker Compose, which spins up a complete 3-broker cluster with admin tools and monitoring:</p>
+
+      <pre><code>cd docker
+docker-compose up -d</code></pre>
+
+      <p>This will start:</p>
+      <ul>
+        <li>3 StreamForge brokers (ports 9092, 9093, 9094)</li>
+        <li>Admin REST API (http://localhost:8080)</li>
+        <li>Prometheus (http://localhost:9090)</li>
+        <li>Grafana (http://localhost:3000)</li>
+      </ul>
+
+      <h3>Your First Message</h3>
+
+      <h4>Create a Topic</h4>
+      <pre><code>curl -X POST http://localhost:8080/api/v1/topics \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-topic",
+    "partitions": 3,
+    "replication_factor": 2
+  }'</code></pre>
+
+      <h4>Produce a Message</h4>
+      <pre><code>curl -X POST http://localhost:8080/api/v1/produce \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic": "my-topic",
+    "key": "user-123",
+    "value": "Hello, StreamForge!"
+  }'</code></pre>
+
+      <h4>Consume Messages</h4>
+      <pre><code>curl http://localhost:8080/api/v1/topics/my-topic/partition/0</code></pre>
+
+      <h3>Using the Go SDK</h3>
+
+      <h4>Producer Example</h4>
+      <pre><code>package main
+
+import (
+  "context"
+  "log"
+  "github.com/iamrahulgupta/streamforge/sdk-go/producer"
+)
+
+func main() {
+  // Create producer config
+  config := producer.DefaultProducerConfig(
+    []string{"localhost:9092"},
+    "my-topic",
+  )
+
+  // Create producer
+  p, err := producer.NewProducer(config)
+  if err != nil {
+    log.Fatalf("Failed to create producer: %v", err)
+  }
+  defer p.Close()
+
+  // Produce message
+  msg := &producer.Message{
+    Key:   []byte("user-123"),
+    Value: []byte("Hello, StreamForge!"),
+  }
+
+  result, err := p.ProduceSync(context.Background(), msg)
+  if err != nil {
+    log.Fatalf("Failed to produce: %v", err)
+  }
+
+  log.Printf("Message produced at offset %d", result.Offset)
+}</code></pre>
+
+      <h4>Consumer Example</h4>
+      <pre><code>package main
+
+import (
+  "context"
+  "log"
+  "github.com/iamrahulgupta/streamforge/sdk-go/consumer"
+)
+
+func main() {
+  // Create consumer config
+  config := consumer.DefaultConsumerConfig(
+    []string{"localhost:9092"},
+    "my-group",
+    []string{"my-topic"},
+  )
+
+  // Create consumer
+  c, err := consumer.NewConsumer(config)
+  if err != nil {
+    log.Fatalf("Failed to create consumer: %v", err)
+  }
+  defer c.Close()
+
+  // Poll messages
+  msg, err := c.Poll(context.Background())
+  if err != nil {
+    log.Fatalf("Failed to poll: %v", err)
+  }
+
+  log.Printf("Received: key=%s, value=%s", msg.Key, msg.Value)
+  c.CommitMessage(msg)
+}</code></pre>
+
+      <h3>Using the Admin CLI</h3>
+
+      <h4>Build the CLI</h4>
+      <pre><code>cd admin
+go build -o streamforge-admin .</code></pre>
+
+      <h4>Basic Commands</h4>
+      <pre><code># List all topics
+./streamforge-admin topic list
+
+# Create a topic
+./streamforge-admin topic create events \
+  --partitions 3 \
+  --replication-factor 2
+
+# Describe a topic
+./streamforge-admin topic describe events
+
+# Produce a message
+./streamforge-admin produce \
+  --topic events \
+  --key "user-123" \
+  --value "event data"
+
+# Consume messages
+./streamforge-admin consume \
+  --topic events \
+  --group my-group \
+  --max-messages 10
+
+# Start REST API server
+./streamforge-admin server --port 8080</code></pre>
+
+      <h3>Verify Installation</h3>
+
+      <h4>Check Broker Status</h4>
+      <pre><code>curl http://localhost:8080/health</code></pre>
+
+      <p>Expected response:</p>
+      <pre><code>{"status": "healthy"}</code></pre>
+
+      <h4>Check Broker Metrics</h4>
+      <pre><code>curl http://localhost:9101/metrics</code></pre>
+
+      <h4>Access Monitoring Dashboards</h4>
+      <ul>
+        <li><strong>Admin Interface:</strong> <a href="http://localhost:8080">http://localhost:8080</a></li>
+        <li><strong>Prometheus:</strong> <a href="http://localhost:9090">http://localhost:9090</a></li>
+        <li><strong>Grafana:</strong> <a href="http://localhost:3000">http://localhost:3000</a> (admin/admin123)</li>
+      </ul>
+
+      <h3>Next Steps</h3>
+
+      <div class="section">
+        <ol>
+          <li><a href="architecture.html">Learn the Architecture</a> - Understand how StreamForge works internally</li>
+          <li><a href="api.html">Explore the API</a> - Learn detailed API documentation</li>
+          <li><a href="deployment.html">Deploy to Production</a> - Set up a production cluster</li>
+          <li><a href="performance.html">Optimize Performance</a> - Tune for your workload</li>
+        </ol>
+      </div>
+
+      <h3>Common Issues</h3>
+
+      <div class="alert alert-warning">
+        <strong>Port Already in Use:</strong> If ports 9092-9094 are in use, modify docker-compose.yml port mappings or run broker.run on different ports.
+      </div>
+
+      <div class="alert alert-warning">
+        <strong>Docker Build Fails:</strong> Ensure you have sufficient disk space and that Docker daemon is running. Try <code>docker system prune</code> to clean up.
+      </div>
+
+      <div class="alert alert-warning">
+        <strong>Memory Issues:</strong> If compilation fails due to memory, increase Docker's memory limit or build native without Docker.
+      </div>
+
+      <h3>Getting Help</h3>
+      <p>If you encounter issues:</p>
+      <ul>
+        <li>Check <a href="configuration.html">Configuration</a> for environment setup</li>
+        <li>Review <a href="deployment.html">Deployment</a> for production setup</li>
+        <li>See <a href="architecture.html">Architecture</a> for component details</li>
+        <li><a href="https://github.com/iamrahulgupta/project-streamforge/issues">Report issues on GitHub</a></li>
+      </ul>
+    </main>
+
+    <footer>
+      <p><strong>StreamForge Documentation</strong></p>
+      <p>A modern event streaming platform built with Rust, Go, and C++</p>
+      <p><a href="https://github.com/iamrahulgupta/project-streamforge">GitHub Repository</a> • 
+         <a href="https://github.com/iamrahulgupta/project-streamforge/issues">Report Issues</a></p>
+      <p><small>© 2026 StreamForge Project. MIT License.</small></p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture - StreamForge Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🏗️ StreamForge Architecture</h1>
+      <p>Understanding the internals and components of StreamForge</p>
+    </header>
+
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="architecture.html" class="active">Architecture</a></li>
+        <li><a href="deployment.html">Deployment</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="protocol.html">Protocol</a></li>
+        <li><a href="configuration.html">Configuration</a></li>
+        <li><a href="performance.html">Performance</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <h2>Architecture Overview</h2>
+
+      <p>StreamForge is a distributed event streaming platform composed of several key components working together:</p>
+
+      <h3>System Components</h3>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>🦀 Broker (Rust)</h4>
+          <p>Core messaging engine with cluster coordination, replication, and partition management.</p>
+        </div>
+        <div class="feature-card">
+          <h4>💾 Storage (C++)</h4>
+          <p>High-performance log engine with memory-mapped file I/O and segment management.</p>
+        </div>
+        <div class="feature-card">
+          <h4>📦 SDK (Go)</h4>
+          <p>Client library for producers and consumers with batching and offset management.</p>
+        </div>
+        <div class="feature-card">
+          <h4>⚙️ Admin (Go)</h4>
+          <p>CLI and REST API for cluster management and monitoring.</p>
+        </div>
+      </div>
+
+      <h3>Broker Architecture</h3>
+
+      <h4>Cluster Management</h4>
+      <p>Manages broker membership and coordination within the cluster.</p>
+      <ul>
+        <li><strong>Membership:</strong> Tracks active brokers and their health status</li>
+        <li><strong>Heartbeat:</strong> Periodic health checks every 3-5 seconds</li>
+        <li><strong>Metadata:</strong> Maintains topic and partition metadata</li>
+        <li><strong>Leader Election:</strong> Raft-based consensus for cluster coordination</li>
+      </ul>
+
+      <h4>Replication</h4>
+      <p>Manages data replication across brokers for fault tolerance.</p>
+      <ul>
+        <li><strong>Leader:</strong> Manages replication to follower brokers</li>
+        <li><strong>Follower:</strong> Syncs messages from leader replica</li>
+        <li><strong>LogSync:</strong> Maintains consistency using append entries protocol</li>
+        <li><strong>In-Sync Replicas (ISR):</strong> Tracks replicas that are caught up with leader</li>
+      </ul>
+
+      <h4>Partition Management</h4>
+      <p>Handles message storage and retrieval at the partition level.</p>
+      <ul>
+        <li><strong>Manager:</strong> Stores and retrieves messages efficiently</li>
+        <li><strong>Offset Manager:</strong> Tracks consumer group offsets</li>
+        <li><strong>Commit Log:</strong> Persists offset commits for durability</li>
+      </ul>
+
+      <h4>Network Protocol</h4>
+      <p>Implements inter-broker and client communication.</p>
+      <ul>
+        <li><strong>gRPC Server:</strong> Accepts client and broker connections</li>
+        <li><strong>gRPC Client:</strong> Makes connections to other brokers</li>
+        <li><strong>Protocol Buffers:</strong> Type-safe message serialization</li>
+        <li><strong>Connection Pooling:</strong> Reuses connections for performance</li>
+      </ul>
+
+      <h3>Storage Architecture</h3>
+
+      <h4>Log Engine</h4>
+      <p>Main storage component managing the complete message lifecycle.</p>
+      <pre><code>LogEngine
+├── Segment Files
+│   ├── Segment 1 (0-999999 offsets)
+│   ├── Segment 2 (1000000-1999999 offsets)
+│   └── Segment N (...)
+├── Index Files
+│   ├── Index 1 (B-tree for Segment 1)
+│   └── Index N (...)
+└── Commit Log
+    └── Consumer group offsets</code></pre>
+
+      <h4>Segment Management</h4>
+      <ul>
+        <li><strong>Fixed Size:</strong> Segments rotate when reaching size limit (default 1GB)</li>
+        <li><strong>Automatic Rotation:</strong> Old segments can be deleted based on retention</li>
+        <li><strong>Fast Lookups:</strong> Index files enable O(log n) message retrieval</li>
+        <li><strong>Memory-Mapped I/O:</strong> Direct kernel page cache access</li>
+      </ul>
+
+      <h4>Storage Layers</h4>
+      <pre><code>Application Layer (Rust)
+        ↓
+    FFI Bridge (C interface)
+        ↓
+    C++ Storage Engine
+        ↓
+    Segment Files (disk)
+        ↓
+    Memory-Mapped Files (mmap)
+        ↓
+    Kernel Page Cache
+        ↓
+    Physical Storage (SSD/HDD)</code></pre>
+
+      <h3>Client SDK Architecture</h3>
+
+      <h4>Producer</h4>
+      <pre><code>Application
+    ↓
+ProducerConfig (brokers, batch settings)
+    ↓
+Producer (connection management)
+    ↓
+Message Batch (collects messages)
+    ↓
+Network Sender (async flush)
+    ↓
+Broker Cluster</code></pre>
+
+      <p>Features:</p>
+      <ul>
+        <li><strong>Batching:</strong> Accumulates messages for efficiency</li>
+        <li><strong>Async API:</strong> Non-blocking message submission</li>
+        <li><strong>Sync API:</strong> Synchronous send with response</li>
+        <li><strong>Error Handling:</strong> Automatic retries with exponential backoff</li>
+      </ul>
+
+      <h4>Consumer</h4>
+      <pre><code>Consumer
+├── Consumer Group Manager
+│   ├── Group Coordinator
+│   ├── Rebalance Handler
+│   └── Offset Manager
+├── Message Fetcher
+│   └── Async polling loop
+├── Heartbeat Sender
+│   └── Keep alive messages
+└── Offset Committer
+    └── Persistent offset storage</code></pre>
+
+      <p>Features:</p>
+      <ul>
+        <li><strong>Consumer Groups:</strong> Distribute load across consumers</li>
+        <li><strong>Offset Management:</strong> Track consumption progress</li>
+        <li><strong>Rebalancing:</strong> Automatic partition reassignment</li>
+        <li><strong>Heartbeats:</strong> Keep consumer active in group</li>
+      </ul>
+
+      <h3>Data Flow</h3>
+
+      <h4>Message Production</h4>
+      <pre><code>Producer Application
+    ↓ produce(message)
+SDK Producer
+    ↓ batch accumulation
+Batch Manager
+    ↓ flush (size/time trigger)
+Network Layer
+    ↓ ProduceRequest (gRPC)
+Broker Network Server
+    ↓ route to partition leader
+Partition Manager
+    ↓ append to log
+Storage Engine
+    ↓ write to segment file
+Memory-Mapped File
+    ↓ kernel page cache
+Disk Storage
+    ↓
+Producer ← ProduceResponse (offset, timestamp)</code></pre>
+
+      <h4>Message Consumption</h4>
+      <pre><code>Consumer Application
+    ↓ poll()
+SDK Consumer
+    ↓ FetchRequest (offset)
+Broker Network Server
+    ↓ route to partition leader
+Partition Manager
+    ↓ fetch from offset
+Storage Engine
+    ↓ lookup in index
+Memory-Mapped File
+    ↓ retrieve messages
+Consumer
+    ↓ batch of messages
+Application ← Message batch</code></pre>
+
+      <h4>Replication Flow</h4>
+      <pre><code>Leader Broker
+    ↓ receives ProduceRequest
+    ↓ appends to local log
+    ↓ sends AppendEntriesRequest
+Follower 1          Follower 2
+    ↓                   ↓
+receives & applies   receives & applies
+    ↓                   ↓
+ACK +-- in-sync replicas --+
+    ↓
+ProduceResponse sent to producer</code></pre>
+
+      <h3>Consistency Model</h3>
+
+      <h4>Write Consistency</h4>
+      <ul>
+        <li><strong>Leader Writes:</strong> Always written to leader partition</li>
+        <li><strong>Replication:</strong> Async replication to follower brokers</li>
+        <li><strong>Min In-Sync Replicas (min.insync.replicas):</strong> Durability guarantee</li>
+        <li><strong>ACK Modes:</strong>
+          <ul>
+            <li>acks=0: No acknowledgment (fastest, least safe)</li>
+            <li>acks=1: Leader acknowledgment</li>
+            <li>acks=-1: All in-sync replicas acknowledgment (slowest, safest)</li>
+          </ul>
+        </li>
+      </ul>
+
+      <h4>Read Consistency</h4>
+      <ul>
+        <li><strong>Read from Leader:</strong> Always reads from partition leader</li>
+        <li><strong>High Water Mark:</strong> Maximum offset available to consumers</li>
+        <li><strong>Offset Commits:</strong> Consumer group offset persistence</li>
+        <li><strong>Ordering:</strong> Messages in partition maintain order per key</li>
+      </ul>
+
+      <h3>Performance Optimizations</h3>
+
+      <h4>Memory-Mapped Files</h4>
+      <p>Zero-copy reads by mapping file directly to process memory:</p>
+      <ul>
+        <li>Direct kernel page cache access</li>
+        <li>Automatic OS caching management</li>
+        <li>Minimal data copying</li>
+        <li>High throughput for sequential reads</li>
+      </ul>
+
+      <h4>Batch Processing</h4>
+      <p>Accumulates multiple messages before network transmission:</p>
+      <ul>
+        <li>Reduced network roundtrips</li>
+        <li>Higher throughput with similar latency</li>
+        <li>Configurable batch size and timeout</li>
+      </ul>
+
+      <h4>Async I/O</h4>
+      <p>Non-blocking operations throughout the stack:</p>
+      <ul>
+        <li>Tokio async runtime for Rust broker</li>
+        <li>Go goroutines for concurrent client connections</li>
+        <li>No thread-per-connection overhead</li>
+      </ul>
+
+      <h4>Connection Pooling</h4>
+      <p>Reuses connections to reduce overhead:</p>
+      <ul>
+        <li>TCP connection pooling to brokers</li>
+        <li>Connection keepalive and health checks</li>
+        <li>Automatic reconnection on failure</li>
+      </ul>
+
+      <h3>Failure Handling</h3>
+
+      <h4>Broker Failures</h4>
+      <ul>
+        <li><strong>Detection:</strong> Heartbeat timeout (3-5s)</li>
+        <li><strong>Leader Election:</strong> Raft-based election triggered</li>
+        <li><strong>Partitions:</strong> Automatically led by other broker</li>
+        <li><strong>Client Failover:</strong> SDK retries on different broker</li>
+      </ul>
+
+      <h4>Network Failures</h4>
+      <ul>
+        <li><strong>Client Retry:</strong> Exponential backoff up to max retries</li>
+        <li><strong>Broker Discovery:</strong> Clients fetch metadata for all brokers</li>
+        <li><strong>Rack Awareness:</strong> Replicas spread across different racks</li>
+      </ul>
+
+      <h4>Storage Failures</h4>
+      <ul>
+        <li><strong>Replication:</strong> Data available on other replicas</li>
+        <li><strong>Durability:</strong> fsync() with configurable interval</li>
+        <li><strong>Checksums:</strong> Verify message integrity</li>
+      </ul>
+
+      <h3>Scaling Architecture</h3>
+
+      <h4>Vertical Scaling</h4>
+      <ul>
+        <li>Increase partition count per broker</li>
+        <li>Larger batch sizes for higher throughput</li>
+        <li>More CPU cores for connection handling</li>
+      </ul>
+
+      <h4>Horizontal Scaling</h4>
+      <ul>
+        <li>Add more brokers to cluster</li>
+        <li>Reassign partitions across brokers</li>
+        <li>Scale producers and consumers independently</li>
+      </ul>
+
+      <h3>Next Steps</h3>
+      <ul>
+        <li><a href="deployment.html">Learn Deployment</a> - Set up a production cluster</li>
+        <li><a href="api.html">Explore APIs</a> - Understand client interfaces</li>
+        <li><a href="protocol.html">Protocol Details</a> - Deep dive into wire format</li>
+        <li><a href="performance.html">Performance Guide</a> - Optimize for your workload</li>
+      </ul>
+    </main>
+
+    <footer>
+      <p><strong>StreamForge Documentation</strong></p>
+      <p>A modern event streaming platform built with Rust, Go, and C++</p>
+      <p><a href="https://github.com/iamrahulgupta/project-streamforge">GitHub Repository</a> • 
+         <a href="https://github.com/iamrahulgupta/project-streamforge/issues">Report Issues</a></p>
+      <p><small>© 2026 StreamForge Project. MIT License.</small></p>
+    </footer>
+  </div>
+</body>
+</html>

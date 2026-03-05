@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protocol Specification - StreamForge Documentation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📡 Protocol Specification</h1>
+      <p>StreamForge wire protocol and message formats</p>
+    </header>
+
+    <nav>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="architecture.html">Architecture</a></li>
+        <li><a href="deployment.html">Deployment</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="protocol.html" class="active">Protocol</a></li>
+        <li><a href="configuration.html">Configuration</a></li>
+        <li><a href="performance.html">Performance</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <h2>Protocol Specification</h2>
+
+      <h3>Overview</h3>
+
+      <p>StreamForge uses Protocol Buffers (protobuf) for all binary communication. This provides:</p>
+      <ul>
+        <li>Type safety and schema validation</li>
+        <li>Forward and backward compatibility</li>
+        <li>Efficient binary serialization</li>
+        <li>Language-independent protocol</li>
+      </ul>
+
+      <h3>Transport Layer</h3>
+
+      <h4>Connection Setup</h4>
+      <pre><code>Client                           Broker
+  |                               |
+  |---------- TCP SYN ---------->|
+  |                               |
+  |<------- TCP SYN-ACK ---------|
+  |                               |
+  |---------- TCP ACK ---------->|
+  |                               |
+  |------- METADATA_REQUEST ----->|
+  |                               |
+  |<----- METADATA_RESPONSE ------|
+  |                               |</code></pre>
+
+      <h4>Message Frame Format</h4>
+      <pre><code>[Message Size: 4 bytes][Message Type: 1 byte][Correlation ID: 4 bytes][Payload: variable]
+
+Example (hex): 00 00 01 00 | 01 | 00 00 00 00 | [protobuf data]
+               ↑           ↑    ↑             ↑
+         256 bytes     ProduceRequest  Correlation  Message content</code></pre>
+
+      <h3>Broker Protocol</h3>
+
+      <h4>ProduceRequest</h4>
+      <pre><code>message ProduceRequest {
+  string topic = 1;
+  repeated Message messages = 2;
+  int32 required_acks = 3;    // -1=all, 0=none, 1=leader
+  int32 timeout_ms = 4;
+}
+
+message Message {
+  string key = 1;
+  bytes value = 2;
+  int64 timestamp = 3;
+  int32 partition = 4;
+  map<string, string> headers = 6;
+}</code></pre>
+
+      <p><strong>Example Request:</strong></p>
+      <pre><code>{
+  "topic": "users",
+  "messages": [
+    {
+      "key": "user-123",
+      "value": "base64-encoded-data",
+      "timestamp": 1646000000000,
+      "partition": 0
+    }
+  ],
+  "required_acks": 1,
+  "timeout_ms": 30000
+}</code></pre>
+
+      <h4>ProduceResponse</h4>
+      <pre><code>message ProduceResponse {
+  int32 status = 1;           // 0=success, non-zero=error
+  string error_message = 2;
+  repeated PartitionResponse partition_responses = 3;
+}
+
+message PartitionResponse {
+  int32 partition = 1;
+  int64 base_offset = 2;      // First offset in batch
+  int64 log_append_time = 3;  // Server timestamp
+}</code></pre>
+
+      <p><strong>Example Response:</strong></p>
+      <pre><code>{
+  "status": 0,
+  "error_message": "",
+  "partition_responses": [
+    {
+      "partition": 0,
+      "base_offset": 1000000,
+      "log_append_time": 1646000000000
+    }
+  ]
+}</code></pre>
+
+      <h4>FetchRequest</h4>
+      <pre><code>message FetchRequest {
+  string topic = 1;
+  int32 partition = 2;
+  int64 offset = 3;           // Starting offset
+  int32 max_bytes = 4;        // Max bytes to return
+  int32 max_wait_ms = 5;      // Max time to wait for data
+}</code></pre>
+
+      <h4>FetchResponse</h4>
+      <pre><code>message FetchResponse {
+  int32 status = 1;
+  string error_message = 2;
+  repeated Message messages = 3;
+  int64 high_water_mark = 4;  // Latest offset available
+}</code></pre>
+
+      <h3>Replication Protocol</h3>
+
+      <h4>AppendEntriesRequest</h4>
+      <pre><code>message AppendEntriesRequest {
+  int32 leader_id = 1;
+  int64 term = 2;             // Current term
+  string topic = 3;
+  int32 partition = 4;
+  int64 prev_log_index = 5;   // Offset of log before new entries
+  int64 prev_log_term = 6;
+  repeated LogEntry entries = 7;
+  int64 leader_commit = 8;    // Leader's commit index
+}
+
+message LogEntry {
+  int64 offset = 1;
+  int64 timestamp = 2;
+  string key = 3;
+  bytes value = 4;
+  map<string, string> headers = 5;
+}</code></pre>
+
+      <h4>AppendEntriesResponse</h4>
+      <pre><code>message AppendEntriesResponse {
+  int32 follower_id = 1;
+  int64 term = 2;
+  bool success = 3;
+  int64 match_index = 4;      // Highest matched offset
+  string error_message = 5;
+}</code></pre>
+
+      <h4>HeartbeatRequest</h4>
+      <pre><code>message HeartbeatRequest {
+  int32 leader_id = 1;
+  int64 term = 2;
+  string topic = 3;
+  int32 partition = 4;
+  int64 leader_commit = 5;
+  int64 timestamp = 6;
+}</code></pre>
+
+      <h3>Consumer Group Protocol</h3>
+
+      <h4>CommitOffsetRequest</h4>
+      <pre><code>message CommitOffsetRequest {
+  string group_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 offset = 4;           // Offset to commit
+}</code></pre>
+
+      <h4>CommitOffsetResponse</h4>
+      <pre><code>message CommitOffsetResponse {
+  int32 status = 1;           // 0=success
+  string error_message = 2;
+}</code></pre>
+
+      <h4>FetchOffsetRequest</h4>
+      <pre><code>message FetchOffsetRequest {
+  string group_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+}</code></pre>
+
+      <h4>FetchOffsetResponse</h4>
+      <pre><code>message FetchOffsetResponse {
+  int32 status = 1;
+  string error_message = 2;
+  int64 offset = 3;           // Current committed offset
+}</code></pre>
+
+      <h3>Metadata Protocol</h3>
+
+      <h4>MetadataRequest</h4>
+      <pre><code>message MetadataRequest {
+  repeated string topics = 1; // Empty = all topics
+}
+
+message PartitionMetadata {
+  int32 id = 1;
+  int32 leader = 2;
+  repeated int32 replicas = 3;
+  repeated int32 isr = 4;     // In-Sync Replicas
+}</code></pre>
+
+      <h4>MetadataResponse</h4>
+      <pre><code>message MetadataResponse {
+  int32 status = 1;
+  repeated BrokerMetadata brokers = 2;
+  repeated TopicMetadata topics = 3;
+}
+
+message BrokerMetadata {
+  int32 id = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message TopicMetadata {
+  string name = 1;
+  int32 num_partitions = 2;
+  int32 replication_factor = 3;
+  repeated PartitionMetadata partitions = 4;
+}</code></pre>
+
+      <h3>Message Format Details</h3>
+
+      <h4>Key Serialization</h4>
+      <p>Keys support both string and binary formats:</p>
+      <ul>
+        <li><strong>String:</strong> UTF-8 encoded</li>
+        <li><strong>Binary:</strong> Raw bytes</li>
+        <li><strong>Null:</strong> Empty key for broadcast messages</li>
+      </ul>
+
+      <h4>Value Serialization</h4>
+      <p>Values can be any binary data:</p>
+      <ul>
+        <li>JSON documents</li>
+        <li>Protocol Buffer messages</li>
+        <li>Apache Avro</li>
+        <li>Raw binary</li>
+        <li>Compressed data</li>
+      </ul>
+
+      <h4>Timestamps</h4>
+      <p>All timestamps are milliseconds since Unix epoch:</p>
+      <pre><code>timestamp_ms = System.currentTimeMillis()  // Java
+timestamp_ms = time.Now().UnixNano() / 1e6 // Go
+timestamp_ms = int(time.time() * 1000)      // Python</code></pre>
+
+      <h3>Compression</h3>
+
+      <p>Messages can be compressed to reduce network bandwidth:</p>
+
+      <h4>Supported Codecs</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Codec</th>
+            <th>Code</th>
+            <th>Ratio</th>
+            <th>Speed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>None</td>
+            <td>0</td>
+            <td>-</td>
+            <td>Fastest</td>
+          </tr>
+          <tr>
+            <td>Gzip</td>
+            <td>1</td>
+            <td>5-10x</td>
+            <td>Slow</td>
+          </tr>
+          <tr>
+            <td>Snappy</td>
+            <td>2</td>
+            <td>2-4x</td>
+            <td>Fast</td>
+          </tr>
+          <tr>
+            <td>LZ4</td>
+            <td>3</td>
+            <td>3-5x</td>
+            <td>Very Fast</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>Compression Headers</h4>
+      <pre><code>[Compression Codec: 1 byte][Compressed Data Size: 4 bytes][Compressed Data]</code></pre>
+
+      <h3>Handshake Sequence</h3>
+
+      <h4>Producer Handshake</h4>
+      <pre><code>1. Client connects to broker
+2. Client sends MetadataRequest for topic
+3. Broker responds with broker list and partition leaders
+4. Client connects to partition leader
+5. Client sends ProduceRequest
+6. Broker responds with ProduceResponse</code></pre>
+
+      <h4>Consumer Handshake</h4>
+      <pre><code>1. Client connects to broker
+2. Client sends MetadataRequest for topics
+3. Client joins consumer group
+4. Broker coordinates group rebalance
+5. Broker assigns partitions to consumer
+6. Client fetches metadata for assigned partitions
+7. Client sends FetchRequest with current offset
+8. Broker responds with FetchResponse</code></pre>
+
+      <h3>Error Handling</h3>
+
+      <h4>Retry Logic</h4>
+      <pre><code>def send_with_retry(request, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            response = send(request, timeout=30s)
+            if response.status == 0:
+                return response
+            elif is_retriable(response.status):
+                wait(exponential_backoff(attempt))
+                continue
+            else:
+                raise NonRetriableError(response)
+        except TimeoutError:
+            wait(exponential_backoff(attempt))
+            continue
+    raise MaxRetriesExceeded()</code></pre>
+
+      <h4>Idempotence</h4>
+      <p>Producers can enable idempotent writes to guarantee exactly-once semantics:</p>
+      <pre><code>producer_id = generate_unique_id()
+sequence_number = 0
+
+for message in messages:
+    request.producer_id = producer_id
+    request.sequence = sequence_number++
+    send(request)</code></pre>
+
+      <h3>Protocol Version Support</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Release Date</th>
+            <th>Breaking Changes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1.0</td>
+            <td>March 2026</td>
+            <td>Initial release</td>
+          </tr>
+          <tr>
+            <td>2.0</td>
+            <td>TBD</td>
+            <td>Transactions support</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Examples</h3>
+
+      <h4>Produce with Custom Headers</h4>
+      <pre><code>message := &Message{
+  Key:   []byte("order-123"),
+  Value: []byte(jsonOrder),
+  Headers: map[string]string{
+    "source": "web-api",
+    "version": "1.0",
+    "correlation-id": "req-456",
+  },
+}
+
+request := &ProduceRequest{
+  Topic:        "orders",
+  Messages:     []*Message{message},
+  RequiredAcks: -1,   // Wait for all replicas
+  TimeoutMs:    30000,
+}</code></pre>
+
+      <h4>Fetch with Compression</h4>
+      <pre><code>request := &FetchRequest{
+  Topic:        "logs",
+  Partition:    0,
+  Offset:       100000,
+  MaxBytes:     1048576,      // 1MB
+  MaxWaitMs:    5000,          // Wait up to 5s for data
+}
+
+// Broker will respond with compressed messages if beneficial</code></pre>
+
+      <h3>Performance Considerations</h3>
+
+      <ul>
+        <li><strong>Message Batching:</strong> Reduces network roundtrips</li>
+        <li><strong>Compression:</strong> Reduces bandwidth at cost of CPU</li>
+        <li><strong>Connection Pooling:</strong> Reuse connections for lower latency</li>
+        <li><strong>Async I/O:</strong> Non-blocking for higher throughput</li>
+        <li><strong>Protocol Buffers:</strong> Efficient binary format</li>
+      </ul>
+
+      <h3>Next Steps</h3>
+      <ul>
+        <li><a href="configuration.html">Configuration Guide</a> - Tune protocol settings</li>
+        <li><a href="performance.html">Performance Guide</a> - Optimize throughput</li>
+        <li><a href="api.html">API Reference</a> - Detailed API docs</li>
+      </ul>
+    </main>
+
+    <footer>
+      <p><strong>StreamForge Documentation</strong></p>
+      <p>A modern event streaming platform built with Rust, Go, and C++</p>
+      <p><a href="https://github.com/iamrahulgupta/project-streamforge">GitHub Repository</a> • 
+         <a href="https://github.com/iamrahulgupta/project-streamforge/issues">Report Issues</a></p>
+      <p><small>© 2026 StreamForge Project. MIT License.</small></p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,203 @@
+syntax = "proto3";
+
+package streamforge.admin;
+
+option go_package = "github.com/iamrahulgupta/streamforge/api/v1";
+option java_package = "com.streamforge.admin";
+option java_outer_classname = "AdminProto";
+
+// Topic represents a topic configuration
+message Topic {
+  string name = 1;
+  int32 num_partitions = 2;
+  int32 replication_factor = 3;
+  map<string, string> config = 4;
+  int64 created_at = 5;
+}
+
+// Partition represents a topic partition
+message Partition {
+  string topic = 1;
+  int32 id = 2;
+  int32 leader = 3;
+  repeated int32 replicas = 4;
+  repeated int32 isr = 5;
+  int64 high_water_mark = 6;
+}
+
+// ConsumerGroup represents a consumer group
+message ConsumerGroup {
+  string id = 1;
+  repeated string topics = 2;
+  int32 member_count = 3;
+  string state = 4; // stable, rebalancing, dead
+  int64 created_at = 5;
+}
+
+// Broker represents a broker in the cluster
+message Broker {
+  int32 id = 1;
+  string host = 2;
+  int32 port = 3;
+  bool leader = 4;
+  int32 partitions_count = 5;
+  int64 last_heartbeat = 6;
+}
+
+// CreateTopicRequest creates a new topic
+message CreateTopicRequest {
+  string name = 1;
+  int32 num_partitions = 2;
+  int32 replication_factor = 3;
+  map<string, string> config = 4;
+}
+
+// CreateTopicResponse confirms topic creation
+message CreateTopicResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  Topic topic = 3;
+}
+
+// DeleteTopicRequest deletes a topic
+message DeleteTopicRequest {
+  string name = 1;
+}
+
+// DeleteTopicResponse confirms topic deletion
+message DeleteTopicResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+}
+
+// ListTopicsRequest lists all topics
+message ListTopicsRequest {}
+
+// ListTopicsResponse returns list of topics
+message ListTopicsResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  repeated Topic topics = 3;
+}
+
+// DescribeTopicRequest gets topic details
+message DescribeTopicRequest {
+  string name = 1;
+}
+
+// DescribeTopicResponse returns topic details
+message DescribeTopicResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  Topic topic = 3;
+  repeated Partition partitions = 4;
+}
+
+// AlterTopicRequest modifies topic configuration
+message AlterTopicRequest {
+  string name = 1;
+  map<string, string> config = 2;
+}
+
+// AlterTopicResponse confirms topic modification
+message AlterTopicResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  Topic topic = 3;
+}
+
+// DescribeClusterRequest gets cluster information
+message DescribeClusterRequest {}
+
+// DescribeClusterResponse returns cluster topology
+message DescribeClusterResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  int32 cluster_id = 3;
+  int32 controller_id = 4;
+  repeated Broker brokers = 5;
+}
+
+// DescribeConsumerGroupRequest gets consumer group details
+message DescribeConsumerGroupRequest {
+  string group_id = 1;
+}
+
+// DescribeConsumerGroupResponse returns consumer group details
+message DescribeConsumerGroupResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  ConsumerGroup group = 3;
+  message Member {
+    string member_id = 1;
+    string client_id = 2;
+    repeated string assigned_partitions = 3;
+  }
+  repeated Member members = 4;
+}
+
+// ListConsumerGroupsRequest lists all consumer groups
+message ListConsumerGroupsRequest {}
+
+// ListConsumerGroupsResponse returns list of consumer groups
+message ListConsumerGroupsResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  repeated ConsumerGroup groups = 3;
+}
+
+// ResetConsumerGroupOffsetRequest resets group offset for a topic
+message ResetConsumerGroupOffsetRequest {
+  string group_id = 1;
+  string topic = 2;
+  int64 offset = 3;
+}
+
+// ResetConsumerGroupOffsetResponse confirms offset reset
+message ResetConsumerGroupOffsetResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+}
+
+// MetricsRequest requests broker metrics
+message MetricsRequest {
+  int32 broker_id = 1; // 0 = all brokers
+}
+
+// MetricsResponse returns broker metrics
+message MetricsResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  message BrokerMetrics {
+    int32 broker_id = 1;
+    int64 messages_produced = 2;
+    int64 messages_consumed = 3;
+    int64 bytes_written = 4;
+    int64 bytes_read = 5;
+    int32 active_connections = 6;
+    double avg_latency_ms = 7;
+    int64 timestamp = 8;
+  }
+  repeated BrokerMetrics broker_metrics = 3;
+}
+
+// AdminService defines admin and management operations
+service AdminService {
+  // Topic Management
+  rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
+  rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse);
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
+  rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse);
+  rpc AlterTopic(AlterTopicRequest) returns (AlterTopicResponse);
+  
+  // Cluster Management
+  rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse);
+  
+  // Consumer Group Management
+  rpc DescribeConsumerGroup(DescribeConsumerGroupRequest) returns (DescribeConsumerGroupResponse);
+  rpc ListConsumerGroups(ListConsumerGroupsRequest) returns (ListConsumerGroupsResponse);
+  rpc ResetConsumerGroupOffset(ResetConsumerGroupOffsetRequest) returns (ResetConsumerGroupOffsetResponse);
+  
+  // Monitoring
+  rpc GetMetrics(MetricsRequest) returns (MetricsResponse);
+}

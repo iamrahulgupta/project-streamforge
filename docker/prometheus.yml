@@ -1,0 +1,51 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'streamforge-cluster'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # StreamForge Broker 1
+  - job_name: 'streamforge-broker-1'
+    static_configs:
+      - targets: ['broker-1:9101']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'broker-1'
+
+  # StreamForge Broker 2
+  - job_name: 'streamforge-broker-2'
+    static_configs:
+      - targets: ['broker-2:9101']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'broker-2'
+
+  # StreamForge Broker 3
+  - job_name: 'streamforge-broker-3'
+    static_configs:
+      - targets: ['broker-3:9101']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'broker-3'
+
+  # Admin REST API metrics
+  - job_name: 'streamforge-admin'
+    static_configs:
+      - targets: ['admin:8080']
+    metrics_path: '/metrics'

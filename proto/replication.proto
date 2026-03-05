@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package streamforge.replication;
+
+option go_package = "github.com/iamrahulgupta/streamforge/api/v1";
+option java_package = "com.streamforge.replication";
+option java_outer_classname = "ReplicationProto";
+
+// LogEntry represents a message to be replicated
+message LogEntry {
+  int64 offset = 1;
+  int64 timestamp = 2;
+  string key = 3;
+  bytes value = 4;
+  map<string, string> headers = 5;
+}
+
+// ReplicateRequest sends log entries from leader to followers
+message ReplicateRequest {
+  int32 leader_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 leader_epoch = 4;
+  repeated LogEntry entries = 5;
+  int64 prev_log_offset = 6;
+  int64 leader_commit = 7;
+}
+
+// ReplicateResponse acknowledges replication from follower
+message ReplicateResponse {
+  int32 follower_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 term = 4;
+  bool success = 5;
+  int64 match_index = 6; // Highest offset replicated on follower
+  string error_message = 7;
+}
+
+// AppendEntriesRequest sends heartbeat and log entries for replication
+message AppendEntriesRequest {
+  int32 leader_id = 1;
+  int64 term = 2;
+  string topic = 3;
+  int32 partition = 4;
+  int64 prev_log_index = 5;
+  int64 prev_log_term = 6;
+  repeated LogEntry entries = 7;
+  int64 leader_commit = 8;
+}
+
+// AppendEntriesResponse acknowledges replicated entries
+message AppendEntriesResponse {
+  int32 follower_id = 1;
+  int64 term = 2;
+  bool success = 3;
+  int64 match_index = 4;
+  string error_message = 5;
+}
+
+// SyncStateRequest requests synchronization of specific offsets
+message SyncStateRequest {
+  int32 source_broker_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 start_offset = 4;
+  int64 end_offset = 5;
+  int32 max_bytes = 6;
+}
+
+// SyncStateResponse provides log entries for synchronization
+message SyncStateResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  repeated LogEntry entries = 3;
+  int64 high_water_mark = 4;
+}
+
+// HeartbeatRequest is sent from leader to followers
+message HeartbeatRequest {
+  int32 leader_id = 1;
+  int64 term = 2;
+  string topic = 3;
+  int32 partition = 4;
+  int64 leader_commit = 5;
+  int64 timestamp = 6;
+}
+
+// HeartbeatResponse acknowledges heartbeat from follower
+message HeartbeatResponse {
+  int32 follower_id = 1;
+  int64 term = 2;
+  bool healthy = 3;
+  int64 last_offset = 4;
+  int64 timestamp = 5;
+}
+
+// LeaderElectionRequest initiates leader election
+message LeaderElectionRequest {
+  int32 candidate_id = 1;
+  int64 term = 2;
+  string topic = 3;
+  int32 partition = 4;
+  int64 last_log_index = 5;
+  int64 last_log_term = 6;
+}
+
+// LeaderElectionResponse votes for or against candidate
+message LeaderElectionResponse {
+  int32 voter_id = 1;
+  int64 term = 2;
+  bool vote_granted = 3;
+  string reason = 4;
+}
+
+// ReplicationStatus tracks replication progress
+message ReplicationStatus {
+  int32 partition = 1;
+  int32 leader_id = 2;
+  repeated int32 in_sync_replicas = 3;
+  int64 committed_offset = 4;
+  map<int32, int64> follower_offsets = 5; // follower_id -> offset
+  int64 last_update_time = 6;
+}
+
+// ReplicationService defines inter-broker replication protocol
+service ReplicationService {
+  // Replicate sends log entries to followers
+  rpc Replicate(ReplicateRequest) returns (ReplicateResponse);
+  
+  // AppendEntries performs log replication with leader election support
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+  
+  // SyncState synchronizes follower state with leader
+  rpc SyncState(SyncStateRequest) returns (SyncStateResponse);
+  
+  // Heartbeat sends periodic heartbeats from leader
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // RequestVote initiates leader election
+  rpc RequestVote(LeaderElectionRequest) returns (LeaderElectionResponse);
+}

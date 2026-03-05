@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package streamforge.broker;
+
+option go_package = "github.com/iamrahulgupta/streamforge/api/v1";
+option java_package = "com.streamforge.broker";
+option java_outer_classname = "BrokerProto";
+
+// Message represents a single message in a topic
+message Message {
+  string key = 1;
+  bytes value = 2;
+  int64 timestamp = 3;
+  int32 partition = 4;
+  int64 offset = 5;
+  map<string, string> headers = 6;
+}
+
+// ProduceRequest is sent by producers to write messages
+message ProduceRequest {
+  string topic = 1;
+  repeated Message messages = 2;
+  int32 required_acks = 3; // -1 = all, 0 = none, 1 = leader
+  int32 timeout_ms = 4;
+}
+
+// ProduceResponse is sent back to producer after writing
+message ProduceResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  message PartitionResponse {
+    int32 partition = 1;
+    int64 base_offset = 2;
+    int64 log_append_time = 3;
+  }
+  repeated PartitionResponse partition_responses = 3;
+}
+
+// FetchRequest is sent by consumers to read messages
+message FetchRequest {
+  string topic = 1;
+  int32 partition = 2;
+  int64 offset = 3;
+  int32 max_bytes = 4;
+  int32 max_wait_ms = 5;
+}
+
+// FetchResponse contains messages for consumer
+message FetchResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  repeated Message messages = 3;
+  int64 high_water_mark = 4;
+}
+
+// CommitOffsetRequest commits consumer group offset
+message CommitOffsetRequest {
+  string group_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 offset = 4;
+}
+
+// CommitOffsetResponse acknowledges offset commit
+message CommitOffsetResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+}
+
+// FetchOffsetRequest retrieves current consumer group offset
+message FetchOffsetRequest {
+  string group_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+}
+
+// FetchOffsetResponse provides current offset for consumer group
+message FetchOffsetResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  int64 offset = 3;
+}
+
+// TopicMetadata describes a topic's configuration and partitions
+message TopicMetadata {
+  string name = 1;
+  int32 num_partitions = 2;
+  int32 replication_factor = 3;
+  message PartitionMetadata {
+    int32 id = 1;
+    int32 leader = 2;
+    repeated int32 replicas = 3;
+    repeated int32 isr = 4; // In-Sync Replicas
+    int64 high_water_mark = 5;
+  }
+  repeated PartitionMetadata partitions = 4;
+}
+
+// MetadataRequest retrieves cluster and topic information
+message MetadataRequest {
+  repeated string topics = 1; // empty means all topics
+}
+
+// MetadataResponse provides cluster and topic metadata
+message MetadataResponse {
+  int32 status = 1; // 0 = success, non-zero = error
+  string error_message = 2;
+  message BrokerMetadata {
+    int32 id = 1;
+    string host = 2;
+    int32 port = 3;
+  }
+  repeated BrokerMetadata brokers = 3;
+  repeated TopicMetadata topics = 4;
+}
+
+// BrokerService defines the main broker communication protocol
+service BrokerService {
+  // Produce writes messages to a topic
+  rpc Produce(ProduceRequest) returns (ProduceResponse);
+  
+  // Fetch reads messages from a topic partition
+  rpc Fetch(FetchRequest) returns (FetchResponse);
+  
+  // CommitOffset commits consumer group offset
+  rpc CommitOffset(CommitOffsetRequest) returns (CommitOffsetResponse);
+  
+  // FetchOffset retrieves consumer group offset
+  rpc FetchOffset(FetchOffsetRequest) returns (FetchOffsetResponse);
+  
+  // GetMetadata retrieves cluster and topic metadata
+  rpc GetMetadata(MetadataRequest) returns (MetadataResponse);
+}
